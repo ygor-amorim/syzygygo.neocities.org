@@ -1,0 +1,969 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>@ygorcore</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300;1,400&family=IBM+Plex+Mono:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg:       #111009;
+      --bg2:      #1c1810;
+      --text:     #e0d4bc;
+      --muted:    #8a7d65;
+      --accent:   #c9935a;
+      --accent2:  #7a5c3a;
+      --border:   #2e2820;
+      --node-1:   #c4522a;
+      --node-2:   #e8a020;
+      --node-3:   #8a6a3a;
+    }
+
+    * { margin:0; padding:0; box-sizing:border-box; }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Crimson Pro', serif;
+      font-weight: 300;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* ── CONSTELLATION ─────────────────────────── */
+    #constellation-wrap {
+      position: relative;
+      width: 100%;
+      height: 100svh;
+      min-height: 500px;
+      overflow: hidden;
+      cursor: none;
+    }
+
+    #stars-canvas {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+    }
+
+    #constellation-svg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* edges */
+    .edge {
+      stroke: var(--accent2);
+      stroke-width: 0.8;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+    .edge.visible { opacity: 1; }
+    .edge-pulse {
+      stroke: var(--accent);
+      stroke-width: 1;
+      stroke-dasharray: 4 8;
+      opacity: 0;
+      transition: opacity 0.6s ease;
+    }
+    .edge-pulse.visible { opacity: 0.4; }
+
+    /* nodes */
+    .node-group { cursor: pointer; }
+    .node-group:focus { outline: none; }
+
+    .node-ring {
+      fill: none;
+      stroke: var(--accent2);
+      stroke-width: 1;
+      transition: stroke 0.3s, stroke-width 0.3s;
+    }
+    .node-group:hover .node-ring,
+    .node-group.active .node-ring {
+      stroke: var(--accent);
+      stroke-width: 1.5;
+    }
+
+    .node-core {
+      transition: r 0.3s cubic-bezier(.34,1.56,.64,1), fill 0.3s;
+    }
+    .node-group:hover .node-core,
+    .node-group.active .node-core {
+      r: 7px;
+    }
+
+    .node-label {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      font-weight: 300;
+      letter-spacing: 0.08em;
+      fill: var(--muted);
+      transition: fill 0.3s;
+      pointer-events: none;
+      text-transform: lowercase;
+    }
+    .node-group:hover .node-label,
+    .node-group.active .node-label {
+      fill: var(--text);
+    }
+
+    /* central node */
+    .node-center .node-core {
+      fill: var(--accent);
+    }
+    .node-center .node-ring {
+      stroke: var(--accent);
+    }
+    .node-center:hover .node-core { r: 10px; }
+
+    /* orbit ring animation */
+    .orbit-ring {
+      fill: none;
+      stroke: var(--accent2);
+      stroke-width: 0.5;
+      stroke-dasharray: 2 6;
+      opacity: 0.15;
+    }
+
+    /* ── INFO PANEL ────────────────────────────── */
+    #info-panel {
+      position: absolute;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(17,16,9,0.92);
+      border: 1px solid var(--border);
+      border-top: 1px solid var(--accent2);
+      padding: 16px 24px;
+      min-width: 280px;
+      max-width: 420px;
+      backdrop-filter: blur(8px);
+      opacity: 0;
+      transform: translateX(-50%) translateY(8px);
+      transition: opacity 0.3s ease, transform 0.3s ease;
+      pointer-events: none;
+    }
+    #info-panel.visible {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+      pointer-events: auto;
+    }
+    #panel-label {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--accent);
+      margin-bottom: 6px;
+    }
+    #panel-title {
+      font-size: 1.15rem;
+      font-weight: 400;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    #panel-desc {
+      font-size: 0.9rem;
+      color: var(--muted);
+      font-style: italic;
+      line-height: 1.5;
+    }
+    #panel-link {
+      display: inline-block;
+      margin-top: 10px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 10px;
+      letter-spacing: 0.05em;
+      color: var(--accent);
+      text-decoration: none;
+      border-bottom: 1px solid var(--accent2);
+      transition: border-color 0.2s, color 0.2s;
+    }
+    #panel-link:hover {
+      color: var(--text);
+      border-color: var(--text);
+    }
+
+    /* scroll hint */
+    #scroll-hint {
+      position: absolute;
+      bottom: 24px;
+      right: 32px;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--muted);
+      opacity: 0.5;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+      animation: bounceDown 2.5s ease-in-out infinite;
+    }
+    @keyframes bounceDown {
+      0%,100% { transform: translateY(0); opacity: 0.5; }
+      50%      { transform: translateY(4px); opacity: 0.8; }
+    }
+    #scroll-hint svg { opacity: 0.6; }
+
+    /* header inside constellation */
+    #site-header {
+      position: absolute;
+      top: 32px;
+      left: 40px;
+      z-index: 10;
+    }
+    #site-header h1 {
+      font-size: 1.4rem;
+      font-weight: 300;
+      color: var(--accent);
+      letter-spacing: -0.02em;
+      line-height: 1;
+    }
+    #site-header .handle {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 0.72rem;
+      color: var(--muted);
+      margin-top: 4px;
+      letter-spacing: 0.05em;
+    }
+
+    /* custom cursor */
+    #cursor {
+      position: fixed;
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      pointer-events: none;
+      z-index: 9999;
+      transform: translate(-50%, -50%);
+      transition: width 0.2s, height 0.2s, background 0.2s;
+      mix-blend-mode: screen;
+    }
+    #cursor.hovering {
+      width: 20px;
+      height: 20px;
+      background: transparent;
+      border: 1px solid var(--accent);
+    }
+
+    /* ── BELOW FOLD ────────────────────────────── */
+    #content {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 80px 32px 100px;
+    }
+
+    .section-sep {
+      width: 40px;
+      height: 1px;
+      background: var(--accent2);
+      margin-bottom: 48px;
+    }
+
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 64px;
+    }
+    @media (max-width: 680px) {
+      .content-grid { grid-template-columns: 1fr; gap: 40px; }
+      #site-header { left: 20px; top: 20px; }
+      #content { padding: 60px 20px 80px; }
+    }
+
+    .col-title {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    .bio-text {
+      font-size: 1.05rem;
+      line-height: 1.8;
+      color: var(--muted);
+    }
+    .bio-text p { margin-bottom: 1.1rem; }
+    .bio-text p:last-child { margin-bottom: 0; }
+    .bio-text em { color: var(--text); font-style: italic; }
+
+    /* widgets */
+    .widget { margin-bottom: 36px; }
+    .widget:last-child { margin-bottom: 0; }
+
+    .w-title {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.2em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 14px;
+    }
+
+    /* now playing */
+    .now-playing {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: var(--bg2);
+      border-left: 2px solid var(--accent);
+    }
+    .pulse-dot {
+      width: 6px;
+      height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      flex-shrink: 0;
+      animation: pulse 2s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%,100% { opacity:1; } 50% { opacity:0.25; }
+    }
+    .track { font-size: 0.92rem; color: var(--text); }
+    .artist { font-size: 0.82rem; color: var(--muted); margin-top: 2px; font-style: italic; }
+
+    /* quote */
+    .quote-text {
+      font-size: 1rem;
+      font-style: italic;
+      color: var(--text);
+      line-height: 1.75;
+      margin-bottom: 10px;
+    }
+    .quote-source {
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.1em;
+      color: var(--muted);
+      text-transform: uppercase;
+    }
+
+    /* posts */
+    .post-item {
+      margin-bottom: 14px;
+      padding-bottom: 14px;
+      border-bottom: 1px solid var(--border);
+    }
+    .post-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .post-item a {
+      color: var(--text);
+      text-decoration: none;
+      font-size: 0.95rem;
+      transition: color 0.2s;
+    }
+    .post-item a:hover { color: var(--accent); }
+    .post-date {
+      font-size: 0.78rem;
+      color: var(--muted);
+      font-style: italic;
+      margin-top: 3px;
+    }
+
+    .dim { color: var(--muted); font-style: italic; font-size: 0.88rem; }
+
+    /* footer */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 28px 32px;
+      max-width: 860px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-family: 'IBM Plex Mono', monospace;
+      font-size: 9px;
+      letter-spacing: 0.12em;
+      color: var(--muted);
+    }
+    footer a { color: var(--muted); text-decoration: none; transition: color 0.2s; }
+    footer a:hover { color: var(--accent); }
+
+    ::selection { background: var(--accent); color: var(--bg); }
+  </style>
+</head>
+<body>
+
+<div id="cursor"></div>
+
+<!-- ── CONSTELLATION HERO ─── -->
+<section id="constellation-wrap" aria-label="Constelação de projetos">
+  <canvas id="stars-canvas"></canvas>
+
+  <div id="site-header">
+    <h1>Ygor Amorim</h1>
+    <div class="handle">@ygorcore · Lisboa</div>
+  </div>
+
+  <svg id="constellation-svg" aria-hidden="true">
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2.5" result="coloredBlur"/>
+        <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glow-strong">
+        <feGaussianBlur stdDeviation="4" result="coloredBlur"/>
+        <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <!-- drawn by JS -->
+  </svg>
+
+  <div id="info-panel">
+    <div id="panel-label">nó</div>
+    <div id="panel-title">—</div>
+    <div id="panel-desc"></div>
+    <a id="panel-link" href="#" target="_blank" rel="noopener noreferrer"></a>
+  </div>
+
+  <div id="scroll-hint">
+    <svg width="10" height="14" viewBox="0 0 10 14" fill="none">
+      <path d="M5 1v12M1 9l4 4 4-4" stroke="currentColor" stroke-width="1" stroke-linecap="round"/>
+    </svg>
+    descer
+  </div>
+</section>
+
+<!-- ── CONTENT ─── -->
+<main id="content">
+  <div class="section-sep"></div>
+  <div class="content-grid">
+
+    <!-- LEFT -->
+    <div>
+      <div class="col-title">sobre</div>
+      <div class="bio-text">
+        <p>Escrevo alguma coisa aqui e lá.</p>
+        <p>Este é um espaço <em>em construção</em>, como todos os espaços deveriam ser.</p>
+      </div>
+
+      <div style="margin-top: 48px;">
+        <div class="col-title">lendo agora</div>
+        <div id="reading-content" class="dim">carregando...</div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+      <div class="widget">
+        <div class="w-title">ouvindo agora</div>
+        <div id="now-playing-content" class="dim">carregando...</div>
+      </div>
+
+      <div class="widget">
+        <div class="w-title">pensamento</div>
+        <div id="quote-content" class="dim">carregando...</div>
+      </div>
+
+      <div class="widget">
+        <div class="w-title">últimos escritos</div>
+        <div id="posts-content" class="dim">carregando...</div>
+      </div>
+    </div>
+
+  </div>
+</main>
+
+<footer>
+  <span>construído com intencionalidade</span>
+  <a href="http://www.wtfpl.net/" target="_blank" rel="noopener noreferrer">WTFPL</a>
+</footer>
+
+<script>
+// ─── CONFIG ─────────────────────────────────────
+const LASTFM_USER    = 'ygwramorim';
+const LASTFM_API_KEY = '43693facbb24d1ac893a7d33846b15cc';
+const SUBSTACK_RSS   = 'https://radinhodepilha.substack.com/feed';
+
+// ─── CONSTELLATION NODES ────────────────────────
+const NODES = [
+  {
+    id: 'center',
+    label: 'ygorcore',
+    kind: 'center',
+    desc: 'escritor. pensador por escrito.',
+    link: null,
+    linkText: null,
+    color: '#c9935a',
+    radius: 7,
+  },
+  {
+    id: 'radinho',
+    label: 'radinho',
+    kind: 'primary',
+    desc: 'newsletter de cultura, política e tempo livre.',
+    link: 'https://radinhodepilha.substack.com/',
+    linkText: 'radinhodepilha.substack.com',
+    color: '#c4522a',
+    radius: 5,
+  },
+  {
+    id: 'twitter',
+    label: '@ygorcore',
+    kind: 'primary',
+    desc: 'pensamentos em trânsito. argumentos em construção.',
+    link: 'https://x.com/ygorcore',
+    linkText: 'x.com/ygorcore',
+    color: '#e8a020',
+    radius: 4.5,
+  },
+  {
+    id: 'github',
+    label: 'github',
+    kind: 'secondary',
+    desc: 'código como prática. projetos em aberto.',
+    link: 'https://github.com/ygor-amorim',
+    linkText: 'github.com/ygor-amorim',
+    color: '#8a7d65',
+    radius: 4,
+  },
+  {
+    id: 'syzygy',
+    label: '@syzygygo',
+    kind: 'secondary',
+    desc: 'sizigia: alinhamento dos corpos. segundo eixo.',
+    link: 'https://x.com/syzygygo',
+    linkText: 'x.com/syzygygo',
+    color: '#7a6a8a',
+    radius: 3.5,
+  },
+  {
+    id: 'lastfm',
+    label: 'last.fm',
+    kind: 'tertiary',
+    desc: 'o que os ouvidos estão fazendo enquanto o resto pensa.',
+    link: 'https://www.last.fm/user/ygwramorim',
+    linkText: 'last.fm/user/ygwramorim',
+    color: '#6a4a3a',
+    radius: 3,
+  },
+];
+
+const EDGES = [
+  ['center', 'radinho'],
+  ['center', 'twitter'],
+  ['center', 'github'],
+  ['center', 'syzygy'],
+  ['center', 'lastfm'],
+  ['radinho', 'twitter'],
+  ['twitter', 'syzygy'],
+];
+
+// ─── CONSTELLATION ENGINE ────────────────────────
+const wrap  = document.getElementById('constellation-wrap');
+const svg   = document.getElementById('constellation-svg');
+
+let W, H, mouseX = null, mouseY = null;
+let positions = {};
+let velocities = {};
+let animFrame;
+let activeNode = null;
+
+function resize() {
+  W = wrap.clientWidth;
+  H = wrap.clientHeight;
+  initPositions();
+}
+
+function initPositions() {
+  const cx = W / 2, cy = H / 2;
+  const r1 = Math.min(W, H) * 0.22;
+  const r2 = Math.min(W, H) * 0.35;
+
+  const orbits = {
+    center:  { r: 0, angle: 0 },
+    radinho: { r: r1, angle: -Math.PI / 2 },
+    twitter: { r: r1, angle: Math.PI / 4 },
+    github:  { r: r1, angle: Math.PI },
+    syzygy:  { r: r2, angle: Math.PI / 6 },
+    lastfm:  { r: r2, angle: -Math.PI * 0.7 },
+  };
+
+  NODES.forEach(n => {
+    const o = orbits[n.id] || { r: r1, angle: Math.random() * Math.PI * 2 };
+    if (!positions[n.id]) {
+      positions[n.id] = {
+        x: cx + o.r * Math.cos(o.angle),
+        y: cy + o.r * Math.sin(o.angle),
+        targetX: cx + o.r * Math.cos(o.angle),
+        targetY: cy + o.r * Math.sin(o.angle),
+        baseAngle: o.angle,
+        baseR: o.r,
+        floatPhase: Math.random() * Math.PI * 2,
+        floatSpeed: 0.0004 + Math.random() * 0.0003,
+      };
+      velocities[n.id] = { x: 0, y: 0 };
+    } else {
+      positions[n.id].targetX = cx + o.r * Math.cos(o.angle);
+      positions[n.id].targetY = cy + o.r * Math.sin(o.angle);
+    }
+  });
+}
+
+function buildSVG() {
+  svg.innerHTML = `
+    <defs>
+      <filter id="glow">
+        <feGaussianBlur stdDeviation="2.5" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+      <filter id="glow-strong">
+        <feGaussianBlur stdDeviation="5" result="b"/>
+        <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+      </filter>
+    </defs>
+    <g id="orbits-g"></g>
+    <g id="edges-g"></g>
+    <g id="nodes-g"></g>
+  `;
+
+  // Orbit guides
+  const orbG = document.getElementById('orbits-g');
+  const r1 = Math.min(W, H) * 0.22;
+  const r2 = Math.min(W, H) * 0.35;
+  [r1, r2].forEach(r => {
+    const el = document.createElementNS('http://www.w3.org/2000/svg', 'ellipse');
+    el.setAttribute('class', 'orbit-ring');
+    el.setAttribute('cx', W / 2);
+    el.setAttribute('cy', H / 2);
+    el.setAttribute('rx', r);
+    el.setAttribute('ry', r * 0.55);
+    orbG.appendChild(el);
+  });
+
+  // Edges
+  const edgesG = document.getElementById('edges-g');
+  EDGES.forEach(([a, b]) => {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    line.setAttribute('class', 'edge');
+    line.id = `edge-${a}-${b}`;
+    edgesG.appendChild(line);
+
+    const pulse = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+    pulse.setAttribute('class', 'edge-pulse');
+    pulse.id = `pulse-${a}-${b}`;
+    pulse.innerHTML = `<animate attributeName="stroke-dashoffset" from="0" to="-24" dur="3s" repeatCount="indefinite"/>`;
+    // animate via JS approach
+    edgesG.appendChild(pulse);
+  });
+
+  // Nodes
+  const nodesG = document.getElementById('nodes-g');
+  NODES.forEach(n => {
+    const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+    g.setAttribute('class', `node-group${n.id === 'center' ? ' node-center' : ''}`);
+    g.setAttribute('tabindex', '0');
+    g.setAttribute('role', 'button');
+    g.setAttribute('aria-label', n.label);
+    g.id = `node-${n.id}`;
+
+    const ring = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    ring.setAttribute('class', 'node-ring');
+    ring.setAttribute('r', n.radius * 2.8);
+    ring.setAttribute('stroke', n.color);
+    ring.setAttribute('opacity', '0.25');
+    g.appendChild(ring);
+
+    const core = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+    core.setAttribute('class', 'node-core');
+    core.setAttribute('r', n.radius);
+    core.setAttribute('fill', n.color);
+    core.setAttribute('filter', n.id === 'center' ? 'url(#glow-strong)' : 'url(#glow)');
+    g.appendChild(core);
+
+    const lbl = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+    lbl.setAttribute('class', 'node-label');
+    lbl.setAttribute('y', n.radius * 3.2);
+    lbl.setAttribute('text-anchor', 'middle');
+    lbl.setAttribute('dominant-baseline', 'hanging');
+    lbl.textContent = n.label;
+    g.appendChild(lbl);
+
+    g.addEventListener('click', () => activateNode(n.id));
+    g.addEventListener('mouseenter', () => hoverNode(n.id));
+    g.addEventListener('mouseleave', () => unHoverNode());
+    g.addEventListener('keydown', e => { if (e.key === 'Enter') activateNode(n.id); });
+    nodesG.appendChild(g);
+  });
+}
+
+let hoverTimeout;
+function hoverNode(id) {
+  clearTimeout(hoverTimeout);
+  document.querySelectorAll('.node-group').forEach(g => g.classList.remove('active'));
+  const g = document.getElementById(`node-${id}`);
+  if (g) g.classList.add('active');
+  showPanel(id);
+}
+function unHoverNode() {
+  hoverTimeout = setTimeout(() => {
+    if (!activeNode) hidePanel();
+  }, 300);
+}
+function activateNode(id) {
+  activeNode = activeNode === id ? null : id;
+  document.querySelectorAll('.node-group').forEach(g => g.classList.remove('active'));
+  if (activeNode) {
+    const g = document.getElementById(`node-${activeNode}`);
+    if (g) g.classList.add('active');
+    showPanel(activeNode);
+  } else {
+    hidePanel();
+  }
+}
+
+function showPanel(id) {
+  const n = NODES.find(x => x.id === id);
+  if (!n) return;
+  document.getElementById('panel-label').textContent = n.kind === 'center' ? 'centro' : 'nó';
+  document.getElementById('panel-title').textContent = n.label;
+  document.getElementById('panel-desc').textContent = n.desc;
+  const lnk = document.getElementById('panel-link');
+  if (n.link) {
+    lnk.href = n.link;
+    lnk.textContent = n.linkText;
+    lnk.style.display = 'inline-block';
+  } else {
+    lnk.style.display = 'none';
+  }
+  document.getElementById('info-panel').classList.add('visible');
+}
+
+function hidePanel() {
+  document.getElementById('info-panel').classList.remove('visible');
+}
+
+let t = 0;
+function animate() {
+  t += 1;
+  const cx = W / 2, cy = H / 2;
+
+  NODES.forEach(n => {
+    const p = positions[n.id];
+    if (n.id === 'center') {
+      p.x += (cx - p.x) * 0.04;
+      p.y += (cy - p.y) * 0.04;
+      return;
+    }
+
+    // Gentle float around base position
+    const floatAmt = 12;
+    const bx = cx + p.baseR * Math.cos(p.baseAngle);
+    const by = cy + p.baseR * Math.sin(p.baseAngle) * 0.55;
+    const fx = bx + Math.sin(t * p.floatSpeed + p.floatPhase) * floatAmt;
+    const fy = by + Math.cos(t * p.floatSpeed * 1.3 + p.floatPhase) * floatAmt * 0.6;
+
+    // Mouse repulsion
+    let rx = 0, ry = 0;
+    if (mouseX !== null) {
+      const dx = p.x - mouseX;
+      const dy = p.y - mouseY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist < 120 && dist > 0) {
+        const force = (120 - dist) / 120 * 18;
+        rx = (dx / dist) * force;
+        ry = (dy / dist) * force;
+      }
+    }
+
+    p.x += (fx + rx - p.x) * 0.025;
+    p.y += (fy + ry - p.y) * 0.025;
+
+    const el = document.getElementById(`node-${n.id}`);
+    if (el) el.setAttribute('transform', `translate(${p.x},${p.y})`);
+  });
+
+  // Center node
+  const cp = positions['center'];
+  const cel = document.getElementById('node-center');
+  if (cel) cel.setAttribute('transform', `translate(${cp.x},${cp.y})`);
+
+  // Update edges
+  EDGES.forEach(([a, b]) => {
+    const pa = positions[a], pb = positions[b];
+    if (!pa || !pb) return;
+    const line = document.getElementById(`edge-${a}-${b}`);
+    const pulse = document.getElementById(`pulse-${a}-${b}`);
+    if (line) {
+      line.setAttribute('x1', pa.x); line.setAttribute('y1', pa.y);
+      line.setAttribute('x2', pb.x); line.setAttribute('y2', pb.y);
+      if (!line.classList.contains('visible')) line.classList.add('visible');
+    }
+    if (pulse) {
+      pulse.setAttribute('x1', pa.x); pulse.setAttribute('y1', pa.y);
+      pulse.setAttribute('x2', pb.x); pulse.setAttribute('y2', pb.y);
+      if (!pulse.classList.contains('visible')) pulse.classList.add('visible');
+      // Animate dash offset
+      const offset = -(t * 0.15) % 24;
+      pulse.style.strokeDashoffset = offset;
+    }
+  });
+
+  // Center node update
+  const centerEl = document.getElementById(`node-center`);
+  if (centerEl) centerEl.setAttribute('transform', `translate(${positions['center'].x},${positions['center'].y})`);
+
+  animFrame = requestAnimationFrame(animate);
+}
+
+// ─── STARS BACKGROUND ───────────────────────────
+function drawStars() {
+  const canvas = document.getElementById('stars-canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, W, H);
+
+  const count = Math.floor(W * H / 3000);
+  for (let i = 0; i < count; i++) {
+    const x = Math.random() * W;
+    const y = Math.random() * H;
+    const r = Math.random() * 0.8 + 0.2;
+    const alpha = Math.random() * 0.35 + 0.05;
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = `rgba(201,147,90,${alpha})`;
+    ctx.fill();
+  }
+}
+
+// ─── CURSOR ─────────────────────────────────────
+const cursorEl = document.getElementById('cursor');
+document.addEventListener('mousemove', e => {
+  cursorEl.style.left = e.clientX + 'px';
+  cursorEl.style.top  = e.clientY + 'px';
+  // Only track inside wrap
+  const rect = wrap.getBoundingClientRect();
+  if (e.clientY < rect.bottom) {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+  } else {
+    mouseX = null; mouseY = null;
+  }
+});
+document.addEventListener('mouseleave', () => { mouseX = null; mouseY = null; });
+
+wrap.addEventListener('mouseenter', () => { cursorEl.style.display = 'block'; });
+wrap.addEventListener('mouseleave', () => {
+  cursorEl.style.display = 'none';
+  mouseX = null; mouseY = null;
+});
+document.querySelectorAll('a, button, .node-group').forEach(el => {
+  el.addEventListener('mouseenter', () => cursorEl.classList.add('hovering'));
+  el.addEventListener('mouseleave', () => cursorEl.classList.remove('hovering'));
+});
+
+// ─── INIT ────────────────────────────────────────
+function init() {
+  resize();
+  drawStars();
+  buildSVG();
+
+  // Set initial transforms
+  NODES.forEach(n => {
+    const el = document.getElementById(`node-${n.id}`);
+    const p = positions[n.id];
+    if (el && p) el.setAttribute('transform', `translate(${p.x},${p.y})`);
+  });
+
+  cancelAnimationFrame(animFrame);
+  animate();
+}
+
+window.addEventListener('resize', () => {
+  cancelAnimationFrame(animFrame);
+  resize();
+  drawStars();
+  buildSVG();
+  NODES.forEach(n => {
+    const el = document.getElementById(`node-${n.id}`);
+    const p = positions[n.id];
+    if (el && p) el.setAttribute('transform', `translate(${p.x},${p.y})`);
+  });
+  animate();
+});
+
+init();
+
+// Close panel on outside click
+wrap.addEventListener('click', e => {
+  if (!e.target.closest('.node-group') && !e.target.closest('#info-panel')) {
+    activeNode = null;
+    document.querySelectorAll('.node-group').forEach(g => g.classList.remove('active'));
+    hidePanel();
+  }
+});
+
+// ─── WIDGETS ────────────────────────────────────
+async function loadNowPlaying() {
+  try {
+    const r = await fetch(`https://ws.audioscrobbler.com/2.0/?method=user.getrecenttracks&user=${LASTFM_USER}&api_key=${LASTFM_API_KEY}&format=json&limit=1`);
+    const d = await r.json();
+    const track = d.recenttracks?.track?.[0];
+    if (!track) throw new Error();
+    const isPlaying = track['@attr']?.nowplaying === 'true';
+    document.getElementById('now-playing-content').innerHTML = isPlaying
+      ? `<div class="now-playing"><div class="pulse-dot"></div><div><div class="track">${track.name}</div><div class="artist">${track.artist['#text']}</div></div></div>`
+      : `<div class="dim">última: ${track.name} — <em>${track.artist['#text']}</em></div>`;
+  } catch {
+    document.getElementById('now-playing-content').innerHTML = '<div class="dim">silêncio no momento</div>';
+  }
+}
+
+async function loadCurrentlyReading() {
+  try {
+    const r = await fetch('currently-reading.json');
+    const book = await r.json();
+    document.getElementById('reading-content').innerHTML = book?.title
+      ? `<div style="font-size:1rem; color:var(--text)">${book.title}</div><div style="font-size:0.85rem; color:var(--muted); font-style:italic; margin-top:4px">${book.author}</div>`
+      : '<div class="dim">nenhum livro no momento</div>';
+  } catch {
+    document.getElementById('reading-content').innerHTML = '<div class="dim">nenhum livro no momento</div>';
+  }
+}
+
+async function loadQuotes() {
+  try {
+    const r = await fetch('quotes.json');
+    const quotes = await r.json();
+    if (!quotes?.length) throw new Error();
+    const q = quotes[Math.floor(Math.random() * quotes.length)];
+    document.getElementById('quote-content').innerHTML =
+      `<div class="quote-text">"${q.content}"</div><div class="quote-source">— ${q.author}</div>`;
+  } catch {
+    document.getElementById('quote-content').innerHTML = '<div class="dim">—</div>';
+  }
+}
+
+async function loadPosts() {
+  try {
+    const r = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=${encodeURIComponent(SUBSTACK_RSS)}`);
+    const d = await r.json();
+    if (d.status !== 'ok' || !d.items?.length) throw new Error();
+    document.getElementById('posts-content').innerHTML = d.items.slice(0, 4).map(p => {
+      const date = new Date(p.pubDate).toLocaleDateString('pt-BR', { year:'numeric', month:'short', day:'numeric' });
+      return `<div class="post-item"><a href="${p.link}" target="_blank" rel="noopener noreferrer">${p.title}</a><div class="post-date">${date}</div></div>`;
+    }).join('');
+  } catch {
+    document.getElementById('posts-content').innerHTML = '<div class="dim">nenhum escrito disponível</div>';
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadNowPlaying();
+  loadCurrentlyReading();
+  loadQuotes();
+  loadPosts();
+});
+</script>
+</body>
+</html>
